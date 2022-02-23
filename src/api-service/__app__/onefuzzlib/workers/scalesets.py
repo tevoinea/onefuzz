@@ -5,10 +5,11 @@
 
 import datetime
 import logging
+from tkinter import N
 from typing import Any, Dict, List, Optional, Tuple, Union
 from uuid import UUID
 
-from onefuzztypes.enums import ErrorCode, NodeState, PoolState, ScalesetState
+from onefuzztypes.enums import ErrorCode, NodeDisaposalStrategy, NodeState, PoolState, ScalesetState
 from onefuzztypes.events import (
     EventScalesetCreated,
     EventScalesetDeleted,
@@ -424,8 +425,7 @@ class Scaleset(BASE_SCALESET, ORMMixin):
 
         # Perform operations until they fail due to scaleset getting locked
         try:
-            self.delete_nodes(to_delete)
-            self.reimage_nodes(to_reimage)
+            self.dispose_nodes(to_reimage, to_delete, NodeDisaposalStrategy.scale_in)
         except UnableToUpdate:
             logging.info(
                 SCALESET_LOG_PREFIX
@@ -550,23 +550,10 @@ class Scaleset(BASE_SCALESET, ORMMixin):
             self._resize_shrink(size - self.size)
 
     def delete_nodes(self, nodes: List[Node]) -> None:
-        if not nodes:
-            logging.info(
-                SCALESET_LOG_PREFIX + "no nodes to delete. scaleset_id:%s",
-                self.scaleset_id,
-            )
-            return
+        if self.should_dispose(nodes): return
 
         for node in nodes:
             node.set_halt()
-
-        if self.state == ScalesetState.halt:
-            logging.info(
-                SCALESET_LOG_PREFIX
-                + "scaleset halting, ignoring node deletion: scaleset_id:%s",
-                self.scaleset_id,
-            )
-            return
 
         machine_ids = set()
         for node in nodes:
@@ -591,12 +578,7 @@ class Scaleset(BASE_SCALESET, ORMMixin):
                 node.delete()
 
     def reimage_nodes(self, nodes: List[Node]) -> None:
-        if not nodes:
-            logging.info(
-                SCALESET_LOG_PREFIX + "no nodes to reimage: scaleset_id:%s",
-                self.scaleset_id,
-            )
-            return
+        if not self.should_dispose(nodes): return
 
         if self.state == ScalesetState.shutdown:
             logging.info(
@@ -606,14 +588,6 @@ class Scaleset(BASE_SCALESET, ORMMixin):
                 self.scaleset_id,
             )
             self.delete_nodes(nodes)
-            return
-
-        if self.state == ScalesetState.halt:
-            logging.info(
-                SCALESET_LOG_PREFIX
-                + "scaleset halting, ignoring node reimage: scaleset_id:%s",
-                self.scaleset_id,
-            )
             return
 
         machine_ids = set()
@@ -833,6 +807,7 @@ class Scaleset(BASE_SCALESET, ORMMixin):
                 )
             )
 
+<<<<<<< HEAD
     def try_to_enable_auto_scaling(self) -> Optional[Error]:
         from .pools import Pool
 
@@ -861,3 +836,70 @@ class Scaleset(BASE_SCALESET, ORMMixin):
         )
         logging.info("Added auto scale resource to scaleset: %s" % self.scaleset_id)
         return add_auto_scale_to_vmss(self.scaleset_id, auto_scale_profile)
+=======
+    def dispose_nodes(self,
+        nodes_to_reimage: List[Node],
+        nodes_to_delete: List[Node],
+        strategy: NodeDisaposalStrategy) -> Optional[Error]:
+        if strategy == NodeDisaposalStrategy.scale_in:
+            # TODO: Make sure the scale in rule exists first
+            if not self.should_dispose(nodes_to_reimage + nodes_to_delete): return None
+
+            # If the scaleset is shutting down, we don't care about nodes that aren't in the done state
+            if self.state == Scaleset.shutdown:
+                nodes_to_delete = nodes_to_delete + nodes_to_reimage
+                nodes_to_reimage = []
+
+            nodes_to_delete = list(filter(lambda n: (not n.debug_keep_node), nodes_to_delete))
+            nodes_to_reimage = list(filter(lambda n: (not n.debug_keep_node) and (n.state != NodeState.done), nodes_to_reimage))
+
+            for node in nodes_to_delete:
+                node.set_halt()
+
+            nodes = self.set_union_nodes(nodes_to_reimage, nodes_to_delete)
+            for n in nodes:
+                n.release_scale_in_protection()
+
+            return None
+        elif strategy == NodeDisaposalStrategy.reimage:
+            self.reimage_nodes(nodes_to_reimage)
+            self.delete_nodes(nodes_to_delete)
+            return None
+        else:
+            return Error(
+                code=ErrorCode.UNHANDLED_ENUM_VARIANT,
+                errors=["Received unhandled node disposal strategy: %s" % strategy]
+            )
+
+    def should_dispose(self, nodes: List[Node]) -> bool:
+        if not nodes:
+            logging.info(
+                SCALESET_LOG_PREFIX + "no nodes to dispose: scaleset_id:%s",
+                self.scaleset_id,
+            )
+            return False
+
+        if self.state == ScalesetState.halt:
+            logging.info(
+                SCALESET_LOG_PREFIX
+                + "scaleset halting, ignoring node disposal: scaleset_id:%s",
+                self.scaleset_id,
+            )
+            return False
+
+        return True
+
+    def set_union_nodes(self, a: List[Node], b: List[Node]) -> List[Node]:
+        ids = set()
+        set_union = []
+
+        for node in a:
+            ids.add(node.machine_id)
+            set_union.append(node)
+
+        for node in b:
+            if node.machine_id not in ids:
+                set_union.append(node)
+
+        return set_union
+>>>>>>> 6a4d820 (Initial start at abstracting node disposal)

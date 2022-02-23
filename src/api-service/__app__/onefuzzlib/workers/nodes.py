@@ -4,11 +4,13 @@
 # Licensed under the MIT License.
 
 import datetime
+from email import message
 import logging
 from typing import List, Optional, Tuple
+from unittest import case
 from uuid import UUID
 
-from onefuzztypes.enums import ErrorCode, NodeState, PoolState, ScalesetState, TaskState
+from onefuzztypes.enums import ErrorCode, NodeDisaposalStrategy, NodeState, PoolState, ScalesetState, TaskState
 from onefuzztypes.events import (
     EventNodeCreated,
     EventNodeDeleted,
@@ -522,6 +524,18 @@ class Node(BASE_NODE, ORMMixin):
                 self.scaleset_id, self.machine_id, protect_from_scale_in=False
             )
         return None
+
+    def dispose(self, strategy: NodeDisaposalStrategy) -> Optional[Error]:
+        # When we upgrade to python 3.10, this can be a match statement
+        if strategy == NodeDisaposalStrategy.scale_in:
+            return self.release_scale_in_protection()
+        elif strategy == NodeDisaposalStrategy.reimage:
+            self.to_reimage()
+        else:
+            return Error(
+                code=ErrorCode.UNHANDLED_ENUM_VARIANT,
+                errors=["Received unhandled node disposal strategy: %s" % strategy]
+            )
 
 
 class NodeTasks(BASE_NODE_TASK, ORMMixin):
