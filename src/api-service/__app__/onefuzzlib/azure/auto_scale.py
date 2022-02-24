@@ -41,7 +41,7 @@ from .monitor import get_monitor_client
 def add_auto_scale_to_vmss(
     vmss: UUID, auto_scale_profile: AutoscaleProfile
 ) -> Optional[Error]:
-    logging.info("Checking scaleset %s for existing auto scale resources" % vmss)
+    logging.error("Checking scaleset %s for existing auto scale resources" % vmss)
     client = get_monitor_client()
     resource_group = get_base_resource_group()
 
@@ -79,7 +79,7 @@ def add_auto_scale_to_vmss(
 def create_auto_scale_resource_for(
     resource_id: UUID, location: Region, profile: AutoscaleProfile
 ) -> Union[AutoscaleSettingResource, Error]:
-    logging.info("Creating auto scale resource for: %s" % resource_id)
+    logging.error("Creating auto scale resource for: %s" % resource_id)
     client = get_monitor_client()
     resource_group = get_base_resource_group()
     subscription = get_subscription()
@@ -93,13 +93,14 @@ def create_auto_scale_resource_for(
         "location": location,
         "profiles": [profile],
         "target_resource_uri": scaleset_uri,
+        "enabled": True,
     }
 
     try:
         auto_scale_resource = client.autoscale_settings.create_or_update(
             resource_group, str(uuid.uuid4()), params
         )
-        logging.info(
+        logging.error(
             "Successfully created auto scale resource %s for %s"
             % (auto_scale_resource.id, resource_id)
         )
@@ -136,6 +137,30 @@ def create_auto_scale_profile(min: int, max: int, queue_uri: str) -> AutoscalePr
                 ),
                 scale_action=ScaleAction(
                     direction=ScaleDirection.INCREASE,
+                    type=ScaleType.CHANGE_COUNT,
+                    value=1,
+                    cooldown=timedelta(minutes=5),
+                ),
+            ),
+            # Scale in
+            ScaleRule(
+                # Scale in if no work in the past 10 mins
+                metric_trigger=MetricTrigger(
+                    metric_name="ApproximateMessageCount",
+                    metric_resource_uri=queue_uri,
+                    # Check every 10 minutes
+                    time_grain=timedelta(minutes=10),
+                    # The average amount of messages there are in the pool queue
+                    time_aggregation=TimeAggregationType.AVERAGE,
+                    statistic=MetricStatisticType.SUM,
+                    # Over the past 10 minutes
+                    time_window=timedelta(minutes=10),
+                    # When there's no messages in the pool queue
+                    operator=ComparisonOperationType.EQUALS,
+                    threshold=0,
+                ),
+                scale_action=ScaleAction(
+                    direction=ScaleDirection.DECREASE,
                     type=ScaleType.CHANGE_COUNT,
                     value=1,
                     cooldown=timedelta(minutes=5),

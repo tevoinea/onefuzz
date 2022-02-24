@@ -5,7 +5,6 @@
 
 import datetime
 import logging
-from tkinter import N
 from typing import Any, Dict, List, Optional, Tuple, Union
 from uuid import UUID
 
@@ -264,6 +263,10 @@ class Scaleset(BASE_SCALESET, ORMMixin):
             )
             auto_scaling = self.try_to_enable_auto_scaling()
             if isinstance(auto_scaling, Error):
+                logging.error(
+                    code=auto_scaling.code,
+                    errors=auto_scaling.errors
+                )
                 self.set_failed(auto_scaling)
                 return
 
@@ -807,11 +810,10 @@ class Scaleset(BASE_SCALESET, ORMMixin):
                 )
             )
 
-<<<<<<< HEAD
     def try_to_enable_auto_scaling(self) -> Optional[Error]:
         from .pools import Pool
 
-        logging.info("Trying to add auto scaling for scaleset %s" % self.scaleset_id)
+        logging.error("Trying to add auto scaling for scaleset %s" % self.scaleset_id)
 
         pool = Pool.get_by_name(self.pool_name)
         if isinstance(pool, Error):
@@ -832,19 +834,19 @@ class Scaleset(BASE_SCALESET, ORMMixin):
             return capacity_failed
 
         auto_scale_profile = create_auto_scale_profile(
-            capacity, capacity, pool_queue_uri
+            1, capacity, pool_queue_uri
         )
-        logging.info("Added auto scale resource to scaleset: %s" % self.scaleset_id)
+        logging.error("Added auto scale resource to scaleset: %s" % self.scaleset_id)
         return add_auto_scale_to_vmss(self.scaleset_id, auto_scale_profile)
-=======
+    
     def dispose_nodes(self,
         nodes_to_reimage: List[Node],
         nodes_to_delete: List[Node],
         strategy: NodeDisaposalStrategy) -> Optional[Error]:
         if strategy == NodeDisaposalStrategy.scale_in:
-            # TODO: Make sure the scale in rule exists first
             if not self.should_dispose(nodes_to_reimage + nodes_to_delete): return None
 
+            logging.error("Disposing nodes using scale-in strategy")
             # If the scaleset is shutting down, we don't care about nodes that aren't in the done state
             if self.state == Scaleset.shutdown:
                 nodes_to_delete = nodes_to_delete + nodes_to_reimage
@@ -902,4 +904,3 @@ class Scaleset(BASE_SCALESET, ORMMixin):
                 set_union.append(node)
 
         return set_union
->>>>>>> 6a4d820 (Initial start at abstracting node disposal)
