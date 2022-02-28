@@ -5,7 +5,6 @@
 
 import datetime
 import logging
-from tkinter import N
 from typing import Any, Dict, List, Optional, Tuple, Union
 from uuid import UUID
 
