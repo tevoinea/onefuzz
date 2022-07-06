@@ -53,6 +53,7 @@ fn print_version(include_sha: bool, include_local: bool, sha: &str) -> Result<()
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
+    println!("cargo:rustc-link-lib=static=glibc");
     let sha = run_cmd(&["git", "rev-parse", "HEAD"])?;
 
     let hardcode_version = env::var("ONEFUZZ_SET_VERSION");
