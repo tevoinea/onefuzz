@@ -37,7 +37,7 @@ public abstract class NotificationsBase {
         private readonly Report _report;
         private readonly Container _container;
         private readonly string _filename;
-        private readonly string _issueTitle;
+        public string _issueTitle { private set; get; }
         private readonly TaskConfig _taskConfig;
         private readonly JobConfig _jobConfig;
         private readonly Uri _targetUrl;
@@ -52,6 +52,7 @@ public abstract class NotificationsBase {
             string issueTitle,
             Report report,
             ILogger log,
+            Uri instanceUrl,
             Task? task = null,
             Job? job = null,
             Uri? targetUrl = null,
@@ -84,7 +85,7 @@ public abstract class NotificationsBase {
 
             var scribanOnly = scribanOnlyOverride ?? scribanOnlyFeatureFlag;
 
-            return new Renderer(
+            var t_Renderer = new Renderer(
                 container,
                 filename,
                 issueTitle,
@@ -95,6 +96,21 @@ public abstract class NotificationsBase {
                 inputUrl!, // TODO: incorrect
                 reportUrl,
                 scribanOnly);
+
+            var renderedIssueTitle = t_Renderer.Render(issueTitle, instanceUrl);
+
+            return new Renderer(
+                container,
+                filename,
+                renderedIssueTitle,
+                report,
+                checkedTask,
+                checkedJob,
+                targetUrl,
+                inputUrl!, // TODO: incorrect
+                reportUrl,
+                scribanOnly
+            );
         }
         public Renderer(
             Container container,
